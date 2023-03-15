@@ -244,6 +244,9 @@
           elm => elm.addEventListener('change', onAudienceFilter))
 
         const searchElm = document.getElementById('search')
+        if (filters.search) {
+          searchElm.value = filters.search
+        }
         searchElm.addEventListener('change', (evt) => onFilterChange(evt, 'search'))
         searchElm.addEventListener('keyup', (evt) => onFilterChange(evt, 'search'))
       }
