@@ -17,13 +17,6 @@
     .content {
       margin-left: 300px;
     }
-    .hidden {
-      display: none;
-      /* opacity: 0.3; */
-    }
-    .has-audience {
-      border: 1px solid red;
-    }
     .sidebar {
       min-width: 300px;
       position: fixed;
@@ -31,45 +24,70 @@
     .sidebar label {
       display: block;
     }
+    .sidebar select {
+      width: 100px;
+    }
+    .sidebar .group {
+      margin-bottom: 20px;
+    }
+    mark {
+      background-color: yellow;
+    }
   </style>
 </head>
 <body>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"
     integrity="sha512-LhccdVNGe2QMEfI3x4DVV3ckMRe36TfydKss6mJpdHjNFiV07dFpS2xzeZedptKZrwxfICJpez09iNioiSZ3hA=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src=https://unpkg.com/compare-versions/lib/umd/index.js></script>
 
     <div class="markdown-body">
       <div class="sidebar">
-        <label for="release">Releases:</label>
-        <select name="release" id="release"></select>
-        <label for="search">Search:</label>
-        <input type="text" name="search" id="search" />
-        <label for="release">Audience Filter:</label>
+        <div class="group">
+          <label for="release">Release:</label>
+          <select name="release" id="release"></select>
+        </div>
+        <div class="group">
+          <label for="releaseFrom">Release range:</label>
+          <select name="releaseFrom" id="releaseFrom"></select> &dash;
+          <select name="releaseTo" id="releaseTo"></select>
+        </div>
+        <div class="group">
+          <label for="search">Search:</label>
+          <input type="text" name="search" id="search" />
+        </div>
 
-        <label>
-          <input type="radio" name="audience" value="" />
-          Any
-        </label>
-        <label>
-          <input type="radio" name="audience" value="general" />
-          General
-        </label>
-        <label>
-          <input type="radio" name="audience" value="users" />
-          Users
-        </label>
-        <label>
-          <input type="radio" name="audience" value="admin" />
-          Administrators
-        </label>
-        <label>
-          <input type="radio" name="audience" value="developers" />
-          Developers
-        </label>
-        <label>
-          <input type="radio" name="audience" value="worker-deployers" />
-          Worker-deployers
-        </label>
+        <div class="group">
+          <label for="release">Audience Filter:</label>
+
+          <label>
+            <input type="radio" name="audience" value="" />
+            Any
+          </label>
+          <label>
+            <input type="radio" name="audience" value="general" />
+            General
+          </label>
+          <label>
+            <input type="radio" name="audience" value="users" />
+            Users
+          </label>
+          <label>
+            <input type="radio" name="audience" value="admin" />
+            Administrators
+          </label>
+          <label>
+            <input type="radio" name="audience" value="developers" />
+            Developers
+          </label>
+          <label>
+            <input type="radio" name="audience" value="worker-deployers" />
+            Worker-deployers
+          </label>
+        </div>
+        <div class="group">
+          <p>Source: <a href="https://raw.githubusercontent.com/taskcluster/taskcluster/main/CHANGELOG.md">CHANGELOG.md</a></p>
+        </div>
       </div>
       <div class="content" id="content"></div>
     </div>
@@ -81,6 +99,8 @@
         search: '',
         audience: '',
         version: '',
+        releaseFrom: '',
+        releaseTo: '',
       }
 
       showdown.setFlavor('github');
@@ -88,6 +108,27 @@
         ghCompatibleHeaderId: true,
         tables: true,
       })
+      const { compareVersions, validate } = window.compareVersions
+
+      function serializeFiltersToHash() {
+        const hash = Object.entries(filters).map(([key, value]) => {
+          if (value) {
+            return `${key}=${encodeURIComponent(value)}`
+          }
+        }).filter(Boolean).join('&')
+        window.location.hash = hash
+      }
+
+      function deserializeFiltersFromHash() {
+        const hash = window.location.hash.slice(1)
+        const parts = hash.split('&')
+        for (const part of parts) {
+          const [key, value] = part.split('=')
+          if (key && value) {
+            filters[key] = decodeURIComponent(value)
+          }
+        }
+      }
 
       const parseMarkdownIntoSections = (markdown) => {
         const lines = markdown.split('\n')
@@ -133,6 +174,12 @@
         data.forEach(section => {
           if (filters.version && section.version !== filters.version) {
             return
+          } else if (validate(section.version) && (filters.releaseFrom || filters.releaseTo)) {
+            const releaseFrom = filters.releaseFrom || '0.0.0'
+            const releaseTo = filters.releaseTo || '999.999.999'
+            if (compareVersions(section.version, releaseFrom) < 0 || compareVersions(section.version, releaseTo) > 0) {
+              return
+            }
           }
           if (filters.search && !section.content.join(' ').toLowerCase().includes(filters.search.toLowerCase())) {
             return
@@ -143,11 +190,30 @@
 
           const sectionEl = document.createElement('section')
           sectionEl.id = section.version
+          let sectionContent = section.html
+          if (filters.search) {
+            sectionContent = sectionContent.replace(new RegExp(`(${filters.search})(?![^<>]*>)`, 'gi'), '<mark>$1</mark>')
+          }
           sectionEl.innerHTML = `
             <h2 id="${section.version}">${section.version} :: ${section.audience}</h2>
-            ${section.html}
+            ${sectionContent}
           `
           content.appendChild(sectionEl)
+        })
+      }
+
+      function onFilterChange(evt, filterKey) {
+        filters[filterKey] = evt.target.value
+        render()
+        serializeFiltersToHash()
+      }
+      function buildDropdown(element, versions, handler, defaultForEmpty = 'All') {
+        versions.forEach(version => {
+          const option = document.createElement('option')
+          option.value = version
+          option.innerText = version || defaultForEmpty
+          option.addEventListener('click', handler)
+          element.appendChild(option)
         })
       }
 
@@ -158,36 +224,29 @@
         ]
 
         const releaseDropdown = document.getElementById('release')
-        const onSelect = (evt) => {
-          filters.version = evt.target.value
-          render()
-        }
-        versions.forEach(version => {
-          const option = document.createElement('option')
-          option.value = version
-          option.innerText = version
-          option.addEventListener('click', onSelect)
-          releaseDropdown.appendChild(option)
-        })
+        buildDropdown(releaseDropdown, versions, (evt) => onFilterChange(evt, 'version'), 'All')
+
+        const releaseFrom = document.getElementById('releaseFrom')
+        buildDropdown(releaseFrom, versions, (evt) => onFilterChange(evt, 'releaseFrom'), 'From')
+        const releaseTo = document.getElementById('releaseTo')
+        buildDropdown(releaseTo, versions, (evt) => onFilterChange(evt, 'releaseTo'), 'To')
 
         const onAudienceFilter = () => {
           filters.audience = document.querySelector('input[name=audience]:checked').value
           render()
+          serializeFiltersToHash()
         }
         document.querySelectorAll('input[name=audience]').forEach(
           elm => elm.addEventListener('change', onAudienceFilter))
 
-        const onSearchFilter = (evt) => {
-          filters.search = evt.target.value
-          render()
-        }
         const searchElm = document.getElementById('search')
-        searchElm.addEventListener('change', (evt) => onSearchFilter(evt))
-        searchElm.addEventListener('keyup', (evt) => onSearchFilter(evt))
+        searchElm.addEventListener('change', (evt) => onFilterChange(evt, 'search'))
+        searchElm.addEventListener('keyup', (evt) => onFilterChange(evt, 'search'))
       }
 
       async function run() {
         await loadChangelog()
+        deserializeFiltersFromHash()
         initUI()
         render()
       }
