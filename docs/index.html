@@ -174,7 +174,10 @@
         data.forEach(section => {
           if (filters.version && section.version !== filters.version) {
             return
-          } else if (validate(section.version) && (filters.releaseFrom || filters.releaseTo)) {
+          } else if (filters.releaseFrom || filters.releaseTo) {
+            if (!validate(section.version)) {
+              return
+            }
             const releaseFrom = filters.releaseFrom || '0.0.0'
             const releaseTo = filters.releaseTo || '999.999.999'
             if (compareVersions(section.version, releaseFrom) < 0 || compareVersions(section.version, releaseTo) > 0) {
