@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Taskcluster Changelog</title>
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css"
+    integrity="sha512-zb2pp+R+czM7GAemdSUQt6jFmr3qCo6ikvBgVU6F5GvwEDR0C2sefFiPEJ9QUpmAKdD5EqDUdNRtbOYnbF/eyQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <style>
+    .markdown-body {
+      margin: 10px 20px;
+    }
+    .content {
+      margin-left: 300px;
+    }
+    .hidden {
+      display: none;
+      /* opacity: 0.3; */
+    }
+    .has-audience {
+      border: 1px solid red;
+    }
+    .sidebar {
+      min-width: 300px;
+      position: fixed;
+    }
+    .sidebar label {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"
+    integrity="sha512-LhccdVNGe2QMEfI3x4DVV3ckMRe36TfydKss6mJpdHjNFiV07dFpS2xzeZedptKZrwxfICJpez09iNioiSZ3hA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <div class="markdown-body">
+      <div class="sidebar">
+        <label for="release">Releases:</label>
+        <select name="release" id="release"></select>
+        <label for="search">Search:</label>
+        <input type="text" name="search" id="search" />
+        <label for="release">Audience Filter:</label>
+
+        <label>
+          <input type="radio" name="audience" value="" />
+          Any
+        </label>
+        <label>
+          <input type="radio" name="audience" value="general" />
+          General
+        </label>
+        <label>
+          <input type="radio" name="audience" value="users" />
+          Users
+        </label>
+        <label>
+          <input type="radio" name="audience" value="admin" />
+          Administrators
+        </label>
+        <label>
+          <input type="radio" name="audience" value="developers" />
+          Developers
+        </label>
+        <label>
+          <input type="radio" name="audience" value="worker-deployers" />
+          Worker-deployers
+        </label>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+
+    <script type="module">
+      const changelogUrl = `https://raw.githubusercontent.com/taskcluster/taskcluster/main/CHANGELOG.md`
+      let data = []
+      let filters = {
+        search: '',
+        audience: '',
+        version: '',
+      }
+
+      showdown.setFlavor('github');
+      const converter = new showdown.Converter({
+        ghCompatibleHeaderId: true,
+        tables: true,
+      })
+
+      const parseMarkdownIntoSections = (markdown) => {
+        const lines = markdown.split('\n')
+        const sections = []
+        let version = ''
+        let audience = ''
+        let content = []
+
+        for (const line of lines) {
+          if (line.startsWith('## ')) {
+            if (version) {
+              sections.push({ version, audience, content, html: converter.makeHtml(content.join('\n')) })
+            }
+            version = line.slice(3)
+            audience = ''
+            content = []
+          } else if (line.startsWith('### ')) {
+            if (audience) {
+              sections.push({ version, audience, content, html: converter.makeHtml(content.join('\n')) })
+              audience = ''
+              content = []
+            }
+            audience = line.slice(4)
+          } else {
+            content.push(line)
+          }
+        }
+        if (version && version && content.length) {
+          sections.push({ version, audience, content, html: converter.makeHtml(content.join('\n')) })
+        }
+        return sections
+      }
+
+      async function loadChangelog() {
+        const res = await (await fetch(changelogUrl)).text()
+        data = parseMarkdownIntoSections(res)
+        render()
+      }
+
+      function render() {
+        const content = document.getElementById('content')
+        content.innerHTML = ''
+        data.forEach(section => {
+          if (filters.version && section.version !== filters.version) {
+            return
+          }
+          if (filters.search && !section.content.join(' ').toLowerCase().includes(filters.search.toLowerCase())) {
+            return
+          }
+          if (filters.audience && !section.audience.toLowerCase().includes(filters.audience)) {
+            return
+          }
+
+          const sectionEl = document.createElement('section')
+          sectionEl.id = section.version
+          sectionEl.innerHTML = `
+            <h2 id="${section.version}">${section.version} :: ${section.audience}</h2>
+            ${section.html}
+          `
+          content.appendChild(sectionEl)
+        })
+      }
+
+      function initUI() {
+        const versions = [
+          '',
+          ...new Set(data.map(item => item.version)),
+        ]
+
+        const releaseDropdown = document.getElementById('release')
+        const onSelect = (evt) => {
+          filters.version = evt.target.value
+          render()
+        }
+        versions.forEach(version => {
+          const option = document.createElement('option')
+          option.value = version
+          option.innerText = version
+          option.addEventListener('click', onSelect)
+          releaseDropdown.appendChild(option)
+        })
+
+        const onAudienceFilter = () => {
+          filters.audience = document.querySelector('input[name=audience]:checked').value
+          render()
+        }
+        document.querySelectorAll('input[name=audience]').forEach(
+          elm => elm.addEventListener('change', onAudienceFilter))
+
+        const onSearchFilter = (evt) => {
+          filters.search = evt.target.value
+          render()
+        }
+        const searchElm = document.getElementById('search')
+        searchElm.addEventListener('change', (evt) => onSearchFilter(evt))
+        searchElm.addEventListener('keyup', (evt) => onSearchFilter(evt))
+      }
+
+      async function run() {
+        await loadChangelog()
+        initUI()
+        render()
+      }
+      run()
+    </script>
+</body>
+</html>
