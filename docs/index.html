@@ -24,6 +24,9 @@
     .sidebar label {
       display: block;
     }
+    .sidebar label span {
+      margin-left: 6px;
+    }
     .sidebar select {
       width: 100px;
     }
@@ -58,32 +61,8 @@
         </div>
 
         <div class="group">
-          <label for="release">Audience Filter:</label>
-
-          <label>
-            <input type="radio" name="audience" value="" />
-            Any
-          </label>
-          <label>
-            <input type="radio" name="audience" value="general" />
-            General
-          </label>
-          <label>
-            <input type="radio" name="audience" value="users" />
-            Users
-          </label>
-          <label>
-            <input type="radio" name="audience" value="admin" />
-            Administrators
-          </label>
-          <label>
-            <input type="radio" name="audience" value="developers" />
-            Developers
-          </label>
-          <label>
-            <input type="radio" name="audience" value="worker-deployers" />
-            Worker-deployers
-          </label>
+          <label for="audience">Audience Filter:</label>
+          <div id="audiences"></div>
         </div>
         <div class="group">
           <p>Source: <a href="https://raw.githubusercontent.com/taskcluster/taskcluster/main/CHANGELOG.md">CHANGELOG.md</a></p>
@@ -223,28 +202,44 @@
           element.appendChild(option)
         })
       }
+      function buildRadioButtons(parent, audiences) {
+        const onAudienceFilter = () => {
+          filters.audience = document.querySelector('input[name=audience]:checked').value
+          render()
+          serializeFiltersToHash()
+        }
+
+        audiences.forEach(audience => {
+          const label = document.createElement('label')
+          const input = document.createElement('input')
+          if (audience === filters.audience) {
+            input.checked = true
+          }
+          input.type = 'radio'
+          input.name = 'audience'
+          input.value = audience
+          label.appendChild(input)
+          const span = document.createElement('span')
+          span.innerText = audience || 'Any'
+          label.appendChild(span)
+          label.addEventListener('change', onAudienceFilter)
+          parent.appendChild(label)
+        })
+      }
 
       function initUI() {
         const versions = [
           '',
           ...new Set(data.map(item => item.version)),
         ]
+        const audiences = [
+          ...new Set(data.map(item => item.audience)),
+        ].filter(Boolean).map(item => item.toLowerCase())
 
-        const releaseDropdown = document.getElementById('release')
-        buildDropdown(releaseDropdown, versions, 'version', 'All',)
-
-        const releaseFrom = document.getElementById('releaseFrom')
-        buildDropdown(releaseFrom, versions, 'releaseFrom', 'From')
-        const releaseTo = document.getElementById('releaseTo')
-        buildDropdown(releaseTo, versions, 'releaseTo', 'To')
-
-        const onAudienceFilter = () => {
-          filters.audience = document.querySelector('input[name=audience]:checked').value
-          render()
-          serializeFiltersToHash()
-        }
-        document.querySelectorAll('input[name=audience]').forEach(
-          elm => elm.addEventListener('change', onAudienceFilter))
+        buildDropdown(document.getElementById('release'), versions, 'version', 'All')
+        buildDropdown(document.getElementById('releaseFrom'), versions, 'releaseFrom', 'From')
+        buildDropdown(document.getElementById('releaseTo'), versions, 'releaseTo', 'To')
+        buildRadioButtons(document.getElementById('audiences'), ['', ...audiences])
 
         const searchElm = document.getElementById('search')
         if (filters.search) {
