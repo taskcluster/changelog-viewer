@@ -207,11 +207,15 @@
         render()
         serializeFiltersToHash()
       }
-      function buildDropdown(element, versions, handler, defaultForEmpty = 'All') {
+      function buildDropdown(element, versions, filterKey, defaultForEmpty = 'All') {
+        const handler = (evt) => onFilterChange(evt, filterKey)
         versions.forEach(version => {
           const option = document.createElement('option')
           option.value = version
           option.innerText = version || defaultForEmpty
+          if (version === filters[filterKey]) {
+            option.selected = true
+          }
           option.addEventListener('click', handler)
           element.appendChild(option)
         })
@@ -224,12 +228,12 @@
         ]
 
         const releaseDropdown = document.getElementById('release')
-        buildDropdown(releaseDropdown, versions, (evt) => onFilterChange(evt, 'version'), 'All')
+        buildDropdown(releaseDropdown, versions, 'version', 'All',)
 
         const releaseFrom = document.getElementById('releaseFrom')
-        buildDropdown(releaseFrom, versions, (evt) => onFilterChange(evt, 'releaseFrom'), 'From')
+        buildDropdown(releaseFrom, versions, 'releaseFrom', 'From')
         const releaseTo = document.getElementById('releaseTo')
-        buildDropdown(releaseTo, versions, (evt) => onFilterChange(evt, 'releaseTo'), 'To')
+        buildDropdown(releaseTo, versions, 'releaseTo', 'To')
 
         const onAudienceFilter = () => {
           filters.audience = document.querySelector('input[name=audience]:checked').value
